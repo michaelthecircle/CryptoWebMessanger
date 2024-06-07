@@ -11,6 +11,11 @@
 <h2>Mihail Borovitin E2EE chat</h2>
 
 <div class="user-form" id="username-page">
+    <label for="encryptionAlgorithm">Encryption Algorithm:</label>
+    <select id="encryptionAlgorithm" name="encryptionAlgorithm" onchange="selectEncryptionAlgorithm(this.value)">
+        <option value="Twofish">Twofish</option>
+        <option value="Serpent">Serpent</option>
+    </select>
     <h2>Enter Chatroom</h2>
     <form id="usernameForm">
         <label for="nickname">Nickname:</label>

@@ -133,19 +133,27 @@ function onError() {
     connectingElement.textContent = 'Could not connect to WebSocket server. Please refresh this page to try again!';
     connectingElement.style.color = 'red';
 }
+let selectedAlgorithm = "Twofish";
+function selectEncryptionAlgorithm(algorithm) {
+    selectedAlgorithm = algorithm;
+}
 
+function encrypt(messageContent, selectedAlgorithm) {
+    return messageContent + " (encrypted with " + selectedAlgorithm + ")";
+}
 
 function sendMessage(event) {
     const messageContent = messageInput.value.trim();
     if (messageContent && stompClient) {
+        const encryptedMessage = encrypt(messageContent, selectedAlgorithm);
         const chatMessage = {
             senderId: nickname,
             recipientId: selectedUserId,
-            content: messageInput.value.trim(),
+            content: encryptedMessage,
             timestamp: new Date()
         };
         stompClient.send("/app/chat", {}, JSON.stringify(chatMessage));
-        displayMessage(nickname, messageInput.value.trim());
+        displayMessage(nickname, encryptedMessage);
         messageInput.value = '';
     }
     chatArea.scrollTop = chatArea.scrollHeight;
@@ -153,12 +161,17 @@ function sendMessage(event) {
 }
 
 
+function decrypt(content, selectedAlgorithm) {
+    return content + " (decrypted " + selectedAlgorithm + ")";
+}
+
 async function onMessageReceived(payload) {
     await findAndDisplayConnectedUsers();
     console.log('Message received', payload);
     const message = JSON.parse(payload.body);
     if (selectedUserId && selectedUserId === message.senderId) {
-        displayMessage(message.senderId, message.content);
+        const decryptedMessage = decrypt(message.content, selectedAlgorithm);
+        displayMessage(message.senderId, decryptedMessage);
         chatArea.scrollTop = chatArea.scrollHeight;
     }
 
