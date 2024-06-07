@@ -14,6 +14,17 @@ let nickname = null;
 let fullname = null;
 let selectedUserId = null;
 
+const p = 23; // Простое число для алгоритма Диффи-Хеллмана
+const g = 5;  // Примитивный корень по модулю p
+let privateKey = null;
+let publicKey = null;
+let sharedSecret = null;
+
+function generateDHKeys() {
+    privateKey = Math.floor(Math.random() * 100) + 1;
+    publicKey = Math.pow(g, privateKey) % p;
+}
+
 function connect(event) {
     nickname = document.querySelector('#nickname').value.trim();
     fullname = document.querySelector('#fullname').value.trim();
@@ -30,18 +41,40 @@ function connect(event) {
     event.preventDefault();
 }
 
-
 function onConnected() {
+    generateDHKeys(); // Генерация ключей Диффи-Хеллмана
+    performDHKeyExchange(); // Обмен публичными ключами
+
     stompClient.subscribe(`/user/${nickname}/queue/messages`, onMessageReceived);
     stompClient.subscribe(`/user/public`, onMessageReceived);
+
+    stompClient.subscribe(`/user/${nickname}/queue/publicKey`, onPublicKeyReceived);
 
     // register the connected user
     stompClient.send("/app/user.addUser",
         {},
-        JSON.stringify({nickName: nickname, fullName: fullname, status: 'ONLINE'})
+        JSON.stringify({ nickName: nickname, fullName: fullname, status: 'ONLINE' })
     );
     document.querySelector('#connected-user-fullname').textContent = fullname;
     findAndDisplayConnectedUsers().then();
+}
+
+function performDHKeyExchange() {
+    stompClient.send("/app/user.sendPublicKey",
+        {},
+        JSON.stringify({ publicKey: publicKey })
+    );
+}
+
+function onPublicKeyReceived(payload) {
+    const message = JSON.parse(payload.body);
+    const receivedPublicKey = message.publicKey;
+    computeSharedSecret(receivedPublicKey);
+}
+
+function computeSharedSecret(receivedPublicKey) {
+    sharedSecret = Math.pow(receivedPublicKey, privateKey) % p;
+    console.log("Общий секрет вычислен:", sharedSecret);
 }
 
 async function findAndDisplayConnectedUsers() {
@@ -67,7 +100,7 @@ function appendUserElement(user, connectedUsersList) {
     listItem.id = user.nickName;
 
     const userImage = document.createElement('img');
-    userImage.src = '../img/user_icon.png';
+    userImage.src = '../img/images.jpeg';
     userImage.alt = user.fullName;
 
     const usernameSpan = document.createElement('span');
@@ -128,11 +161,11 @@ async function fetchAndDisplayUserChat() {
     chatArea.scrollTop = chatArea.scrollHeight;
 }
 
-
 function onError() {
     connectingElement.textContent = 'Could not connect to WebSocket server. Please refresh this page to try again!';
     connectingElement.style.color = 'red';
 }
+
 let selectedAlgorithm = "Twofish";
 function selectEncryptionAlgorithm(algorithm) {
     selectedAlgorithm = algorithm;
@@ -150,6 +183,7 @@ function sendMessage(event) {
             senderId: nickname,
             recipientId: selectedUserId,
             content: encryptedMessage,
+            algorithm: selectedAlgorithm,
             timestamp: new Date()
         };
         stompClient.send("/app/chat", {}, JSON.stringify(chatMessage));
@@ -160,7 +194,6 @@ function sendMessage(event) {
     event.preventDefault();
 }
 
-
 function decrypt(content, selectedAlgorithm) {
     return content + " (decrypted " + selectedAlgorithm + ")";
 }
@@ -170,6 +203,7 @@ async function onMessageReceived(payload) {
     console.log('Message received', payload);
     const message = JSON.parse(payload.body);
     if (selectedUserId && selectedUserId === message.senderId) {
+        selectedAlgorithm = message.algorithm;
         const decryptedMessage = decrypt(message.content, selectedAlgorithm);
         displayMessage(message.senderId, decryptedMessage);
         chatArea.scrollTop = chatArea.scrollHeight;
@@ -192,12 +226,12 @@ async function onMessageReceived(payload) {
 function onLogout() {
     stompClient.send("/app/user.disconnectUser",
         {},
-        JSON.stringify({nickName: nickname, fullName: fullname, status: 'OFFLINE'})
+        JSON.stringify({ nickName: nickname, fullName: fullname, status: 'OFFLINE' })
     );
     window.location.reload();
 }
 
-usernameForm.addEventListener('submit', connect, true); // step 1
+usernameForm.addEventListener('submit', connect, true);
 messageForm.addEventListener('submit', sendMessage, true);
 logout.addEventListener('click', onLogout, true);
 window.onbeforeunload = () => onLogout();
