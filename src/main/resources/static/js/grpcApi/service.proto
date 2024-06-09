@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package grpcApi;
+
+message Message {
+  string key = 1;
+  string crypto_algorithm = 2;
+  string padding = 3;
+  string cipher_mode = 4;
+  string content = 5;
+}
+
+message MessageLikeFile {
+  Message message = 1;
+  string format = 2;
+}
+
+message EncryptDecryptRequest {
+  Message message = 1;
+}
+
+message EncryptDecryptResponse {
+  string message = 1;
+  Message data = 2;
+}
+
+message EncryptDecryptFileRequest {
+  MessageLikeFile message = 1;
+}
+
+message EncryptDecryptFileResponse {
+  string message = 1;
+  MessageLikeFile data = 2;
+}
+
+service CryptoService {
+  rpc EncryptData(EncryptDecryptRequest) returns (EncryptDecryptResponse);
+  rpc DecryptData(EncryptDecryptRequest) returns (EncryptDecryptResponse);
+  rpc EncryptFileFromComputer(EncryptDecryptFileRequest) returns (EncryptDecryptFileResponse);
+  rpc DecryptFileFromComputer(EncryptDecryptFileRequest) returns (EncryptDecryptFileResponse);
+}

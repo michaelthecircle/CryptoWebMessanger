@@ -9,6 +9,37 @@ const connectingElement = document.querySelector('.connecting');
 const chatArea = document.querySelector('#chat-messages');
 const logout = document.querySelector('#logout');
 
+import { CryptoServiceClient } from './generated/service_grpc_web_pb';
+
+import { EncryptDecryptRequest, Message } from './generated/service_pb';
+
+const grpcClient = new CryptoServiceClient('http://localhost:8080');
+
+function encryptData(request) {
+    return new Promise((resolve, reject) => {
+        grpcClient.encryptData(request, {}, (err, response) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(response);
+            }
+        });
+    });
+}
+
+// Функция для вызова метода DecryptData
+function decryptData(request) {
+    return new Promise((resolve, reject) => {
+        grpcClient.decryptData(request, {}, (err, response) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(response);
+            }
+        });
+    });
+}
+
 const P = 23n;
 const G = 5n;
 
@@ -175,28 +206,24 @@ function setHellmanStatus(status) {
 }
 
 async function encrypt(messageContent, selectedAlgorithm, sharedKey, timeStamp) {
-    var xhr = new XMLHttpRequest();
-    var url = "http://localhost:8090/encryptMsg";
-    xhr.open("POST", url, true);
-    xhr.setRequestHeader("Content-Type", "application/json");
-    let result = "";
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            result = JSON.parse(xhr.responseText).content;
-        } else if (xhr.readyState === 4) {
-            console.error("Failed to encrypt message:", xhr.status, xhr.responseText);
-        }
-    };
-    var data = JSON.stringify({
-        key: timeStamp,
-        crypto_algorithm: selectedAlgorithm,
-        padding: "ZEROS",
-        cipher_mode: "CBC",
-        content: messageContent
-    });
-    console.log("Sending data:", data);
-    xhr.send(data);
-    return result;
+    const request = new EncryptDecryptRequest();
+    const message = new Message();
+
+    message.setKey(timeStamp);
+    message.setCryptoAlgorithm(selectedAlgorithm);
+    message.setPadding("ZEROS");
+    message.setCipherMode("CFB");
+    message.setContent(messageContent);
+    request.setMessage(message);
+
+    try {
+        const response = await encryptData(request);
+        const encryptedContent = response.getMessage();  // или другое поле в зависимости от структуры ответа
+        return encryptedContent;
+    } catch (error) {
+        console.error("Failed to encrypt message:", error);
+        throw error;
+    }
 }
 
 async function sendMessage(event) {
@@ -228,29 +255,25 @@ async function sendMessage(event) {
     event.preventDefault();
 }
 
-function decrypt(content, selectedAlgorithm, shared, timeStamp) {
-    var xhr = new XMLHttpRequest();
-    var url = "http://localhost:8090/decryptMsg";
-    xhr.open("POST", url, true);
-    xhr.setRequestHeader("Content-Type", "application/json");
-    let result = "";
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            result = JSON.parse(xhr.responseText).content;
-        } else if (xhr.readyState === 4) {
-            console.error("Failed to encrypt message:", xhr.status, xhr.responseText);
-        }
-    };
-    var data = JSON.stringify({
-        key: timeStamp,
-        crypto_algorithm: selectedAlgorithm,
-        padding: "ZEROS",
-        cipher_mode: "CBC",
-        content: messageContent
-    });
-    console.log("Sending data:", data);
-    xhr.send(data);
-    return result;
+async function decrypt(content, selectedAlgorithm, shared, timeStamp) {
+    const request = new EncryptDecryptRequest();
+    const message = new Message();
+
+    message.setKey(timeStamp);
+    message.setCryptoAlgorithm(selectedAlgorithm);
+    message.setPadding("ZEROS");
+    message.setCipherMode("CBC");
+    message.setContent(content);
+    request.setMessage(message);
+
+    try {
+        const response = await decryptData(request);
+        const decryptedContent = response.getMessage();  // или другое поле в зависимости от структуры ответа
+        return decryptedContent;
+    } catch (error) {
+        console.error("Failed to decrypt message:", error);
+        throw error;
+    }
 }
 
 async function onMessageReceived(payload) {
