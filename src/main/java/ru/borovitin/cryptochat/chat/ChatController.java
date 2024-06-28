@@ -27,7 +27,8 @@ public class ChatController {
                         savedMsg.getId(),
                         savedMsg.getSenderId(),
                         savedMsg.getRecipientId(),
-                        savedMsg.getContent()
+                        savedMsg.getContent(),
+                        savedMsg.getAlgorithm()
                 )
         );
     }

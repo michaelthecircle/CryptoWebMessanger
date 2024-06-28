@@ -9,6 +9,61 @@ const connectingElement = document.querySelector('.connecting');
 const chatArea = document.querySelector('#chat-messages');
 const logout = document.querySelector('#logout');
 
+import { CryptoServiceClient } from './generated/service_grpc_web_pb';
+
+import { EncryptDecryptRequest, Message } from './generated/service_pb';
+
+const grpcClient = new CryptoServiceClient('http://localhost:8080');
+
+function encryptData(request) {
+    return new Promise((resolve, reject) => {
+        grpcClient.encryptData(request, {}, (err, response) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(response);
+            }
+        });
+    });
+}
+
+// Функция для вызова метода DecryptData
+function decryptData(request) {
+    return new Promise((resolve, reject) => {
+        grpcClient.decryptData(request, {}, (err, response) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(response);
+            }
+        });
+    });
+}
+
+const P = 23n;
+const G = 5n;
+
+function getRandomBigInt(max) {
+    let randomBigInt;
+    do {
+        randomBigInt = BigInt(Math.floor(Math.random() * Number(max)));
+    } while (randomBigInt === 0n);
+    return randomBigInt;
+}
+
+function generatePrivateKey() {
+    const maxRandom = P - 1n;
+    return getRandomBigInt(maxRandom);
+}
+
+function generatePublicKey(privateKey) {
+    return G ** privateKey % P;
+}
+
+function generateSharedKey(publicKey, privateKey) {
+    return publicKey ** privateKey % P;
+}
+
 let stompClient = null;
 let nickname = null;
 let fullname = null;
@@ -30,12 +85,10 @@ function connect(event) {
     event.preventDefault();
 }
 
-
 function onConnected() {
     stompClient.subscribe(`/user/${nickname}/queue/messages`, onMessageReceived);
     stompClient.subscribe(`/user/public`, onMessageReceived);
 
-    // register the connected user
     stompClient.send("/app/user.addUser",
         {},
         JSON.stringify({nickName: nickname, fullName: fullname, status: 'ONLINE'})
@@ -67,7 +120,7 @@ function appendUserElement(user, connectedUsersList) {
     listItem.id = user.nickName;
 
     const userImage = document.createElement('img');
-    userImage.src = '../img/user_icon.png';
+    userImage.src = '../img/pivo.jpeg';
     userImage.alt = user.fullName;
 
     const usernameSpan = document.createElement('span');
@@ -101,7 +154,6 @@ function userItemClick(event) {
     const nbrMsg = clickedUser.querySelector('.nbr-msg');
     nbrMsg.classList.add('hidden');
     nbrMsg.textContent = '0';
-
 }
 
 function displayMessage(senderId, content) {
@@ -128,37 +180,119 @@ async function fetchAndDisplayUserChat() {
     chatArea.scrollTop = chatArea.scrollHeight;
 }
 
-
 function onError() {
     connectingElement.textContent = 'Could not connect to WebSocket server. Please refresh this page to try again!';
     connectingElement.style.color = 'red';
 }
 
+let selectedAlgorithm = "";
+let encryptionMode = "";
+let padding = "";
+function selectEncryptionAlgorithm(algorithm) {
+    selectedAlgorithm = algorithm;
+}
 
-function sendMessage(event) {
+//DH
+let privateKeyAlice = 0n;
+let publicKeyAlice = 0n;
+let sharedKeyAlice = 0n;
+let privateKeyBob = 0n;
+let publicKeyBob = 0n;
+let sharedKeyBob = 0n;
+let statusHellman = 0;
+
+function setHellmanStatus(status) {
+    statusHellman = status;
+}
+
+async function encrypt(messageContent, selectedAlgorithm, sharedKey, timeStamp) {
+    const request = new EncryptDecryptRequest();
+    const message = new Message();
+
+    message.setKey(timeStamp);
+    message.setCryptoAlgorithm(selectedAlgorithm);
+    message.setPadding("ZEROS");
+    message.setCipherMode("CFB");
+    message.setContent(messageContent);
+    request.setMessage(message);
+
+    try {
+        const response = await encryptData(request);
+        const encryptedContent = response.getMessage();  // или другое поле в зависимости от структуры ответа
+        return encryptedContent;
+    } catch (error) {
+        console.error("Failed to encrypt message:", error);
+        throw error;
+    }
+}
+
+async function sendMessage(event) {
     const messageContent = messageInput.value.trim();
     if (messageContent && stompClient) {
+        if (statusHellman === 0) {
+            privateKeyAlice = generatePrivateKey();
+            publicKeyAlice = generatePublicKey(privateKeyAlice);
+            setHellmanStatus(1);
+        } else if (statusHellman === 2) {
+            sharedKeyAlice = generateSharedKey(publicKeyBob, privateKeyAlice);
+        }
+        const encryptedMessage = await encrypt(messageContent, selectedAlgorithm, sharedKeyAlice, timeStamp);
         const chatMessage = {
             senderId: nickname,
             recipientId: selectedUserId,
-            content: messageInput.value.trim(),
+            content: encryptedMessage,
+            algorithm: selectedAlgorithm,
             timestamp: new Date()
         };
+        console.log("СООБЩЕНИЕ ПРИШЛО НА ОТПРАВКУ");
+        console.log(encryptedMessage);
+        console.log("-------------");
         stompClient.send("/app/chat", {}, JSON.stringify(chatMessage));
-        displayMessage(nickname, messageInput.value.trim());
+        displayMessage(nickname, messageContent);
         messageInput.value = '';
     }
     chatArea.scrollTop = chatArea.scrollHeight;
     event.preventDefault();
 }
 
+async function decrypt(content, selectedAlgorithm, shared, timeStamp) {
+    const request = new EncryptDecryptRequest();
+    const message = new Message();
+
+    message.setKey(timeStamp);
+    message.setCryptoAlgorithm(selectedAlgorithm);
+    message.setPadding("ZEROS");
+    message.setCipherMode("CBC");
+    message.setContent(content);
+    request.setMessage(message);
+
+    try {
+        const response = await decryptData(request);
+        const decryptedContent = response.getMessage();  // или другое поле в зависимости от структуры ответа
+        return decryptedContent;
+    } catch (error) {
+        console.error("Failed to decrypt message:", error);
+        throw error;
+    }
+}
 
 async function onMessageReceived(payload) {
     await findAndDisplayConnectedUsers();
     console.log('Message received', payload);
     const message = JSON.parse(payload.body);
     if (selectedUserId && selectedUserId === message.senderId) {
-        displayMessage(message.senderId, message.content);
+        if (statusHellman === 1) {
+            privateKeyBob = generatePrivateKey();
+            publicKeyBob = generatePublicKey(privateKeyBob);
+            sharedKeyBob = generateSharedKey(publicKeyAlice, privateKeyBob);
+            setHellmanStatus(2);
+        }
+        selectEncryptionAlgorithm(message.algorithm);
+        console.log("СООБЩЕНИЕ ПРИШЛО");
+        console.log(message.content);
+        console.log("-------------");
+        const decryptedMessage = decrypt(message.content, selectedAlgorithm, sharedKeyBob, timeStamp);
+        displayMessage(message.senderId, decryptedMessage);
         chatArea.scrollTop = chatArea.scrollHeight;
     }
 
@@ -176,15 +310,77 @@ async function onMessageReceived(payload) {
     }
 }
 
+const fileInput = document.getElementById('fileInput');
+const attachFileButton = document.getElementById('attachFileButton');
+
+attachFileButton.addEventListener('click', () => {
+    fileInput.click();
+});
+
+const refreshUsersButton = document.getElementById('refreshUsersButton');
+
+refreshUsersButton.addEventListener('click', async () => {
+    try {
+        await findAndDisplayConnectedUsers();
+        console.log('User list refreshed successfully');
+    } catch (error) {
+        console.error('Error refreshing user list:', error);
+    }
+});
+
+fileInput.addEventListener('change', handleFileSelection);
+let timeStamp = "examplekey123456";
+function handleFileSelection(event) {
+    const files = event.target.files;
+    if (files.length > 0) {
+        const file = files[0];
+        const formData = new FormData();
+        formData.append('pathForLoadFile', file.name);
+        formData.append('cryptoAlgorithm', selectedAlgorithm);
+        formData.append('padding', padding);
+        formData.append('encryptionMode', encryptionMode);
+        formData.append('content', "");
+        formData.append('format', file.name.split('.').pop().toLowerCase());
+        formData.append('key', sharedKeyAlice);
+
+        fetch('http://localhost:8090/upload', {
+            method: 'POST',
+            body: formData,
+            mode: 'no-cors'
+        })
+            .then(response => {
+                if (response.ok) {
+                    console.log('File uploaded successfully');
+                } else {
+                    console.error('Failed to upload file');
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading file:', error);
+            });
+    }
+}
+
 function onLogout() {
-    stompClient.send("/app/user.disconnectUser",
-        {},
-        JSON.stringify({nickName: nickname, fullName: fullname, status: 'OFFLINE'})
-    );
+    if (stompClient) {
+        stompClient.send("/app/user.disconnectUser",
+            {},
+            JSON.stringify({nickName: nickname, fullName: fullname, status: 'OFFLINE'})
+        );
+    }
     window.location.reload();
 }
 
-usernameForm.addEventListener('submit', connect, true); // step 1
+window.addEventListener('beforeunload', async function(event) {
+    if (stompClient) {
+        stompClient.send("/app/user.disconnectUser",
+            {},
+            JSON.stringify({nickName: nickname, fullName: fullname, status: 'OFFLINE'})
+        );
+    }
+});
+
+
+usernameForm.addEventListener('submit', connect, true);
 messageForm.addEventListener('submit', sendMessage, true);
 logout.addEventListener('click', onLogout, true);
-window.onbeforeunload = () => onLogout();

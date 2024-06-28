@@ -8,9 +8,32 @@
 </head>
 <body>
 
-<h2>Mihail Borovitin E2EE chat</h2>
+<h2>Mihail Borovitin and Rudolf Braininger E2EE chat</h2>
 
 <div class="user-form" id="username-page">
+    <label for="encryptionAlgorithm">Encryption Algorithm:</label>
+    <select id="encryptionAlgorithm" name="encryptionAlgorithm" onchange="selectEncryptionAlgorithm(this.value)">
+        <option value="TwoFish">TwoFish</option>
+        <option value="Serpent">Serpent</option>
+        <option value="RC6">RC6</option>
+        <option value="Camellia">Camellia</option>
+    </select>
+    <label for="encryptionMode">Encryption Mode:</label>
+    <select id="encryptionMode" name="encryptionMode">
+        <option value="CBC">CBC</option>
+        <option value="CFB">CFB</option>
+        <option value="CTR">CTR</option>
+        <option value="ECB">ECB</option>
+        <option value="OFB">OFB</option>
+        <option value="PCBC">PCBC</option>
+    </select>
+    <label for="padding">Padding:</label>
+    <select id="padding" name="padding">
+        <option value="ANSIX923">ANSIX923</option>
+        <option value="ISO10126">ISO10126</option>
+        <option value="PKCS7">PKCS7</option>
+        <option value="ZEROS">ZEROS</option>
+    </select>
     <h2>Enter Chatroom</h2>
     <form id="usernameForm">
         <label for="nickname">Nickname:</label>
@@ -25,9 +48,11 @@
 
 
 <div class="chat-container hidden" id="chat-page">
+
     <div class="users-list">
         <div class="users-list-container">
             <h2>Online Users</h2>
+            <button id="refreshUsersButton">Refresh Online Users</button>
             <ul id="connectedUsers">
             </ul>
         </div>
@@ -40,8 +65,9 @@
     <div class="chat-area">
         <div class="chat-area" id="chat-messages">
         </div>
-
         <form id="messageForm" name="messageForm" class="hidden">
+            <input type="file" id="fileInput" accept="image/*, .pdf, .doc, .docx" multiple>
+            <button id="attachFileButton">Attach File</button>
             <div class="message-input">
                 <input autocomplete="off" type="text" id="message" placeholder="Type your message...">
                 <button>Send</button>
@@ -52,6 +78,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.1.4/sockjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbn/1.8.0/jsbn.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 <script src="/js/main.js"></script>
 </body>
 </html>
